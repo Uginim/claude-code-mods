@@ -11,7 +11,7 @@
       "name": "creation-log",
       "source": "./plugins/creation-log",
       "description": "Pane listing files and links Claude created (new files, gh create URLs, published Artifacts)",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "keywords": [
         "pane",
         "history",
@@ -23,7 +23,7 @@
       "name": "edit-diff-log",
       "source": "./plugins/edit-diff-log",
       "description": "Pane listing every file edit Claude made, each with its unified diff, kept across sessions",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "keywords": [
         "pane",
         "diff",

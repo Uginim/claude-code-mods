@@ -120,7 +120,7 @@ test('an opened row offers Open, Show in folder and Copy path; scripts are only 
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'a' })
-  expect((await ui.findAll({ type: 'Button' })).map(b => b.text).slice(4)).toEqual(['Open', 'Show in folder', 'Copy path'])
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.text).slice(6)).toEqual(['Open', 'Show in folder', 'Copy path'])
   await ui.press({ key: 'open-a' })
   expect(runs.slice(-2)).toEqual([['open', '/w/notes.md'], ['xdg-open', '/w/notes.md']])
   await ui.press({ key: 'reveal-a' })
@@ -138,5 +138,39 @@ test('an opened row offers Open, Show in folder and Copy path; scripts are only 
   await ui.press({ key: 'copy-c' })
   expect(copies.at(-1)).toBe('https://gist.github.com/x/1')
   expect(toasts.at(-1)).toBe('Copied URL.')
+  await ui.unmount()
+})
+
+test('This session hides earlier sessions, and the choice is remembered', async ($, on) => {
+  on('command.register', () => ({ value: { command: 'creations' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.id', () => ({ value: 'this-session' }))
+  const store: Record<string, unknown> = {
+    entries: [
+      { id: 'a', kind: 'file', name: 'mine.md', full: '/w/mine.md', at: 2, session: 'this-session' },
+      { id: 'b', kind: 'file', name: 'prev.md', full: '/w/prev.md', at: 1, session: 'other-session' },
+    ],
+  }
+  on('store.get', (_, e) => ({ value: store[e.key] }))
+  on('store.set', (_, e) => {
+    store[e.key] = e.value
+
+    return { value: undefined }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Button', text: /\[othe\]/ })).toBeDefined()
+
+  await ui.press({ key: 'scope-session' })
+  expect(await ui.find({ type: 'Button', text: /\[othe\]/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: '1 earlier session hidden.' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: /mine\.md/ })).toBeDefined()
+  expect(store.scope).toBe('session')
+
+  await ui.press({ key: 'scope-all' })
+  expect(await ui.find({ type: 'Button', text: /\[othe\]/ })).toBeDefined()
+  expect(store.scope).toBe('all')
   await ui.unmount()
 })

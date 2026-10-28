@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Change } from '../types'
+import type { Change, Scope } from '../types'
 
 type Hunk = {
   oldStart: number
@@ -22,6 +22,8 @@ const changes = atom({ plugin: 'edit-diff-log', key: 'changes' } as const, [], {
 })
 const openId = atom({ plugin: 'edit-diff-log', key: 'openId' } as const, null)
 const shownSession = atom({ plugin: 'edit-diff-log', key: 'shownSession' } as const, null)
+const scope = atom({ plugin: 'edit-diff-log', key: 'scope' } as const, 'all' as Scope)
+const SCOPE_KEY = 'scope'
 
 const fileName = (path: string) => path.split('/').pop() || path
 const hhmmss = (at: number) => {
@@ -79,6 +81,16 @@ const toPatch = (hunks: readonly Hunk[]) => {
   return patch
 }
 
+// The remembered choice of `This session` / `All sessions`, read into the session at start.
+const loadScope = async ($: EngineInterface) => {
+  const value = await $.store.get(SCOPE_KEY)
+  await update($, scope, () => (value === 'session' ? 'session' : 'all'))
+}
+const chooseScope = async ($: EngineInterface, next: Scope) => {
+  await update($, scope, () => next)
+  await $.store.set(SCOPE_KEY, next)
+}
+
 const STORE_KEY = 'changes'
 
 const mergeById = (...lists: readonly (readonly Change[])[]) =>
@@ -125,7 +137,7 @@ export const register: Register = on => {
       name: 'edit-diffs',
       description: 'Open or close the pane of file edits Claude made',
     })
-    await persist($)
+    await Promise.all([persist($), loadScope($)])
 
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -169,7 +181,9 @@ export const register: Register = on => {
     const list = await read($, changes)
     const open = await read($, openId)
     const shown = await read($, shownSession)
+    const only = (await read($, scope)) === 'session'
     const groups = groupBySession(list, await $.session.id())
+    const hidden = groups.filter(group => !group.isCurrent).length
 
     const copyPath = async (path: string) => {
       const copied = await $.ui.copy({ text: path, surface: e.surface })
@@ -203,12 +217,21 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        <Button key="close" role="dismiss" onPress={() => $.ui.close({ id: PANE })}>
-          Close
-        </Button>
+        <Box flexDirection="row" gap={1}>
+          <Button key="close" role="dismiss" onPress={() => $.ui.close({ id: PANE })}>
+            Close
+          </Button>
+          <Button key="scope-session" variant={only ? 'primary' : undefined} onPress={() => chooseScope($, 'session')}>
+            This session
+          </Button>
+          <Button key="scope-all" variant={only ? undefined : 'primary'} onPress={() => chooseScope($, 'all')}>
+            All sessions
+          </Button>
+        </Box>
         {list.length === 0 && <Text dimColor>No edits yet.</Text>}
         {list.length > 0 && groups[0]?.isCurrent !== true && <Text dimColor>No edits in this session yet.</Text>}
-        {groups.map(({ id, items, isCurrent }) =>
+        {only && hidden > 0 && <Text dimColor>{plural(hidden, 'earlier session')} hidden.</Text>}
+        {groups.filter(group => !only || group.isCurrent).map(({ id, items, isCurrent }) =>
           isCurrent ? (
             <Box key={`s-${id}`} flexDirection="column">
               <Text bold>This session · {summarize(items)}</Text>

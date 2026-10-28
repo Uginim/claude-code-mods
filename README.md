@@ -61,7 +61,7 @@ Then run `/reload-plugins` in an open session, or start a new one.
 
 ```text
 ┌ Creations ─────────────────────────────────────────┐
-│ [Close]                                            │
+│ [Close] [This session] [All sessions]              │
 │ This session · 1 file, 1 link                      │
 │ 14:02:51 link gist.github.com/…/3f9c2a             │
 │ 14:01:10 file README.md                            │
@@ -83,6 +83,7 @@ Then run `/reload-plugins` in an open session, or start a new one.
 **How it works**
 
 - The pane opens when a session starts. `/creations` closes it or opens it again; `Esc` or the **Close** button closes it too.
+- **This session** / **All sessions** at the top choose what the pane lists: only this session's entries, or this session's followed by the earlier ones. The highlighted button is the current choice; it is kept across sessions, and *All sessions* is the default. With *This session*, a dim line says how many earlier sessions are hidden.
 - Entries are grouped by session. The current session comes first and is always open; each earlier session is one line with the time of its oldest kept entry, the folder it ran in, how many files and links it has, and the first four characters of its id, for example `[9b1e]`. Pressing that line shows its entries; pressing it again, or another session's line, hides them.
 - Rows are newest first. Pressing a row shows its full path or URL and these buttons; pressing it again hides them:
   - **Open**: opens the file or link with the system's default app (`open` on macOS, `xdg-open` where `open` is missing). Not offered for files that run when opened, such as `.app`, `.command`, `.sh` or `.pkg`.
@@ -99,7 +100,7 @@ Then run `/reload-plugins` in an open session, or start a new one.
 
 ```text
 ┌ Edit diffs ────────────────────────────────────────┐
-│ [Close]                                            │
+│ [Close] [This session] [All sessions]              │
 │ This session · 2 edits +13 -4                      │
 │ 14:05:33 register.tsx +12 -3                       │
 │   /Users/me/projects/demo/hooks/register.tsx       │
@@ -124,6 +125,7 @@ Then run `/reload-plugins` in an open session, or start a new one.
 
 - `/edit-diffs` opens or closes the pane. It does not open by itself.
 - Edits are grouped by session, the same way as in creation-log: the current session first and open, each earlier session as one line (time, folder, number of edits, total added / removed lines, id) that shows its edits when pressed.
+- **This session** / **All sessions** at the top work as in creation-log; the choice is kept separately for each pane.
 - Each row shows the file name and the added / removed line counts. Pressing it shows the full path, a **Copy path** button and a unified diff.
 - The list is shared by all your sessions and keeps the latest 100 edits. Each diff keeps whole hunks up to 20,000 characters; when the first hunk alone is larger, the row shows `Diff too large to show.`
 

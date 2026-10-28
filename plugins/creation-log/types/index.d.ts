@@ -9,8 +9,11 @@ export type Entry = {
   dir?: string
 }
 
+// Which sessions the pane lists; the choice is kept across sessions.
+export type Scope = 'session' | 'all'
+
 declare module 'claude-code' {
   interface PluginState {
-    'creation-log': { entries: Shaped<Entry[]>; openId: string | null; shownSession: string | null }
+    'creation-log': { entries: Shaped<Entry[]>; openId: string | null; shownSession: string | null; scope: Scope }
   }
 }

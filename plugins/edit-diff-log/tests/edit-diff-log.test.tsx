@@ -105,3 +105,35 @@ test('edits and overwrites are listed with counts, a press shows the diff', asyn
     await ui.unmount()
   }
 })
+
+test('This session hides earlier sessions, and the choice is remembered', async ($, on) => {
+  on('command.register', () => ({ value: { command: 'edit-diffs' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.id', () => ({ value: 'this-session' }))
+  const change = { path: '/w/x.ts', added: 1, removed: 0, patch: '' }
+  const store: Record<string, unknown> = {
+    scope: 'session',
+    changes: [
+      { ...change, id: 'a', name: 'mine.ts', at: 2, session: 'this-session' },
+      { ...change, id: 'b', name: 'prev.ts', at: 1, session: 'other-session' },
+    ],
+  }
+  on('store.get', (_, e) => ({ value: store[e.key] }))
+  on('store.set', (_, e) => {
+    store[e.key] = e.value
+
+    return { value: undefined }
+  })
+
+  // A choice saved by an earlier session applies from the start.
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Button', text: /mine\.ts/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: /\[othe\]/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: '1 earlier session hidden.' })).toBeDefined()
+
+  await ui.press({ key: 'scope-all' })
+  expect(await ui.find({ type: 'Button', text: /\[othe\]/ })).toBeDefined()
+  expect(store.scope).toBe('all')
+  await ui.unmount()
+})

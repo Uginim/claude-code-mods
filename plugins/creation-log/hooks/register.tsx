@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Entry } from '../types'
+import type { Entry, Scope } from '../types'
 
 const PANE = 'creation-log'
 const TITLE = 'Creations'
@@ -14,6 +14,8 @@ const entries = atom({ plugin: 'creation-log', key: 'entries' } as const, [], {
 })
 const openId = atom({ plugin: 'creation-log', key: 'openId' } as const, null)
 const shownSession = atom({ plugin: 'creation-log', key: 'shownSession' } as const, null)
+const scope = atom({ plugin: 'creation-log', key: 'scope' } as const, 'all' as Scope)
+const SCOPE_KEY = 'scope'
 
 const fileName = (path: string) => path.split('/').pop() || path
 const linkName = (url: string) => {
@@ -87,6 +89,16 @@ const summarize = (items: readonly Entry[]) => {
   return [files && plural(files, 'file'), links && plural(links, 'link')].filter(Boolean).join(', ')
 }
 
+// The remembered choice of `This session` / `All sessions`, read into the session at start.
+const loadScope = async ($: EngineInterface) => {
+  const value = await $.store.get(SCOPE_KEY)
+  await update($, scope, () => (value === 'session' ? 'session' : 'all'))
+}
+const chooseScope = async ($: EngineInterface, next: Scope) => {
+  await update($, scope, () => next)
+  await $.store.set(SCOPE_KEY, next)
+}
+
 const STORE_KEY = 'entries'
 const KEEP = 500
 
@@ -141,7 +153,7 @@ export const register: Register = on => {
       description: 'Open or close the pane of files and links Claude created',
     })
     void $.ui.open({ id: PANE, title: TITLE, closeOnEscape: true })
-    await persist($)
+    await Promise.all([persist($), loadScope($)])
 
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -195,7 +207,9 @@ export const register: Register = on => {
     const list = await read($, entries)
     const open = await read($, openId)
     const shown = await read($, shownSession)
+    const only = (await read($, scope)) === 'session'
     const groups = groupBySession(list, await $.session.id())
+    const hidden = groups.filter(group => !group.isCurrent).length
     const room = Math.max(1, (e.viewport?.rows ?? 24) - 2)
     const toast = (text: string) => $.ui.toast(text)
 
@@ -246,12 +260,21 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        <Button key="close" role="dismiss" onPress={() => $.ui.close({ id: PANE })}>
-          Close
-        </Button>
+        <Box flexDirection="row" gap={1}>
+          <Button key="close" role="dismiss" onPress={() => $.ui.close({ id: PANE })}>
+            Close
+          </Button>
+          <Button key="scope-session" variant={only ? 'primary' : undefined} onPress={() => chooseScope($, 'session')}>
+            This session
+          </Button>
+          <Button key="scope-all" variant={only ? undefined : 'primary'} onPress={() => chooseScope($, 'all')}>
+            All sessions
+          </Button>
+        </Box>
         {list.length === 0 && <Text dimColor>No files or links created yet.</Text>}
         {list.length > 0 && groups[0]?.isCurrent !== true && <Text dimColor>Nothing created in this session yet.</Text>}
-        {groups.map(({ id, items, isCurrent }) =>
+        {only && hidden > 0 && <Text dimColor>{plural(hidden, 'earlier session')} hidden.</Text>}
+        {groups.filter(group => !only || group.isCurrent).map(({ id, items, isCurrent }) =>
           isCurrent ? (
             <Box key={`s-${id}`} flexDirection="column">
               <Text bold>This session · {summarize(items)}</Text>
