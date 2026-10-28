@@ -1,0 +1,17 @@
+{
+  "name": "creation-log",
+  "version": "0.1.0",
+  "description": "Pane listing files and links Claude created (new files, gh create URLs, published Artifacts)",
+  "author": {
+    "name": "Uginim"
+  },
+  "repository": "https://github.com/Uginim/claude-code-mods",
+  "license": "MIT",
+  "keywords": [
+    "pane",
+    "history",
+    "files",
+    "links"
+  ],
+  "types": "./types/index.d.ts"
+}

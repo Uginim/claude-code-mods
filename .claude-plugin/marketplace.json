@@ -1,0 +1,48 @@
+{
+  "name": "claude-code-mods",
+  "owner": {
+    "name": "Uginim"
+  },
+  "metadata": {
+    "description": "Small Claude Code mods: a creation log, an edit diff log, and table export buttons"
+  },
+  "plugins": [
+    {
+      "name": "creation-log",
+      "source": "./plugins/creation-log",
+      "description": "Pane listing files and links Claude created (new files, gh create URLs, published Artifacts)",
+      "version": "0.1.0",
+      "keywords": [
+        "pane",
+        "history",
+        "files",
+        "links"
+      ]
+    },
+    {
+      "name": "edit-diff-log",
+      "source": "./plugins/edit-diff-log",
+      "description": "Pane listing every file edit Claude made, each with its unified diff, kept across sessions",
+      "version": "0.1.0",
+      "keywords": [
+        "pane",
+        "diff",
+        "history",
+        "edits"
+      ]
+    },
+    {
+      "name": "table-export",
+      "source": "./plugins/table-export",
+      "description": "Buttons under Claude's replies that copy each markdown table as TSV or save it as CSV in ~/Downloads",
+      "version": "0.1.0",
+      "keywords": [
+        "table",
+        "csv",
+        "tsv",
+        "export",
+        "clipboard"
+      ]
+    }
+  ]
+}

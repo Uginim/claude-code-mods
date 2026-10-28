@@ -1,0 +1,17 @@
+{
+  "name": "edit-diff-log",
+  "version": "0.1.0",
+  "description": "Pane listing every file edit Claude made, each with its unified diff, kept across sessions",
+  "author": {
+    "name": "Uginim"
+  },
+  "repository": "https://github.com/Uginim/claude-code-mods",
+  "license": "MIT",
+  "keywords": [
+    "pane",
+    "diff",
+    "history",
+    "edits"
+  ],
+  "types": "./types/index.d.ts"
+}

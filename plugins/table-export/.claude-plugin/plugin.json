@@ -1,0 +1,17 @@
+{
+  "name": "table-export",
+  "version": "0.1.0",
+  "description": "Buttons under Claude's replies that copy each markdown table as TSV or save it as CSV in ~/Downloads",
+  "author": {
+    "name": "Uginim"
+  },
+  "repository": "https://github.com/Uginim/claude-code-mods",
+  "license": "MIT",
+  "keywords": [
+    "table",
+    "csv",
+    "tsv",
+    "export",
+    "clipboard"
+  ]
+}
