@@ -1,7 +1,15 @@
 {
   "name": "table-export",
-  "version": "0.1.0",
-  "description": "Buttons under Claude's replies that copy each markdown table as TSV or save it as CSV in ~/Downloads",
+  "version": "0.2.0",
+  "description": "Buttons under Claude's replies that copy each markdown table as TSV or save it as CSV (in ~/Downloads unless configured)",
+  "userConfig": {
+    "saveDir": {
+      "type": "string",
+      "title": "CSV folder",
+      "description": "Folder where Save table n CSV writes its files. Absolute path, or starting with ~/ for your home folder. Empty uses ~/Downloads.",
+      "default": "~/Downloads"
+    }
+  },
   "author": {
     "name": "Uginim"
   },

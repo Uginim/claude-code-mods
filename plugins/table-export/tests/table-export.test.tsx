@@ -82,3 +82,46 @@ test('each table in a reply gets a copy and a save button', async ($, on) => {
     }
   }
 })
+
+test('the CSV folder comes from the saveDir setting', { options: { saveDir: '~/Documents/tables/' } }, async ($, on) => {
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>{e.props.text}</Text>
+  })
+  on('env.get', () => ({ value: '/Users/me' }))
+  on('clock.now', () => ({ value: Date.UTC(2026, 9, 28, 5, 6, 7) }))
+  const writes: string[] = []
+  on('fs.write', (_, e) => {
+    writes.push(e.path)
+    return { value: undefined }
+  })
+  on('ui.toast', () => ({ value: undefined }))
+
+  const ui = await $.ui.mount({ ...row({ text: REPLY, isFirstOfReply: true }), surface: 'terminal' })
+  await ui.press({ key: 'save-0' })
+  expect(writes.at(-1)).toMatch(/^\/Users\/me\/Documents\/tables\/claude-table-\d{8}-\d{6}\.csv$/)
+  await ui.unmount()
+})
+
+test('a relative saveDir is refused with a toast', { options: { saveDir: 'tables' } }, async ($, on) => {
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>{e.props.text}</Text>
+  })
+  const writes: string[] = []
+  on('fs.write', (_, e) => {
+    writes.push(e.path)
+    return { value: undefined }
+  })
+  const toasts: string[] = []
+  on('ui.toast', (_, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+
+  const ui = await $.ui.mount({ ...row({ text: REPLY, isFirstOfReply: true }), surface: 'terminal' })
+  await ui.press({ key: 'save-0' })
+  expect(writes).toHaveLength(0)
+  expect(toasts.at(-1)).toBe('CSV folder must be absolute or start with ~/: tables')
+  await ui.unmount()
+})

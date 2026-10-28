@@ -131,7 +131,8 @@ Then run `/reload-plugins` in an open session, or start a new one.
 ```
 
 - **Copy table n** copies the table as TSV, so it pastes into separate spreadsheet cells.
-- **Save table n CSV** writes `~/Downloads/claude-table-YYYYMMDD-HHMMSS.csv`, UTF-8 with a BOM so spreadsheet apps detect the encoding (non-ASCII text such as Korean stays readable). A toast shows the saved path.
+- **Save table n CSV** writes `claude-table-YYYYMMDD-HHMMSS.csv` to `~/Downloads`, UTF-8 with a BOM so spreadsheet apps detect the encoding (non-ASCII text such as Korean stays readable). A toast shows the saved path.
+- **CSV folder** (`saveDir`): set it in `/config` or when installing. An absolute path or one starting with `~/`; empty means `~/Downloads`. The folder must already exist; if the write fails, a toast says why.
 - Cell clean-up: `**bold**`, `__bold__` and backticks are dropped, `<br>` becomes a space, `\|` becomes `|`.
 
 **Which tables count:** tables whose rows start and end with `|`, followed by a separator row. Tables inside fenced code blocks and summary blocks get no buttons.

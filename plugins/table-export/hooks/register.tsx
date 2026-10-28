@@ -57,15 +57,34 @@ const stamp = (at: number) => {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
 }
 
-const save = async ($: EngineInterface, rows: string[][], n: number) => {
+const DEFAULT_DIR = '~/Downloads'
+
+// Resolves the configured folder to an absolute path, or a reason it cannot be used.
+const resolveDir = async ($: EngineInterface, configured: string) => {
+  const dir = configured.trim().replace(/\/+$/, '') || DEFAULT_DIR
+  if (dir.startsWith('/')) return { dir }
+  if (dir !== '~' && !dir.startsWith('~/')) return { reason: `CSV folder must be absolute or start with ~/: ${dir}` }
   const home = await $.env.get('HOME')
-  if (home === undefined) return $.ui.toast('HOME is not set, so ~/Downloads cannot be found.')
-  const path = `${home}/Downloads/claude-table-${stamp(await $.clock.now())}.csv`
-  await $.fs.write(path, toCsv(rows))
+  if (home === undefined) return { reason: `HOME is not set, so ${dir} cannot be found.` }
+
+  return { dir: home + dir.slice(1) }
+}
+
+const save = async ($: EngineInterface, rows: string[][], n: number, saveDir: string) => {
+  const resolved = await resolveDir($, saveDir)
+  if (resolved.dir === undefined) return $.ui.toast(resolved.reason)
+  const path = `${resolved.dir}/claude-table-${stamp(await $.clock.now())}.csv`
+  try {
+    await $.fs.write(path, toCsv(rows))
+  } catch (error) {
+    return $.ui.toast(`Not saved to ${path}: ${error instanceof Error ? error.message : String(error)}`)
+  }
   $.ui.toast(`Saved table ${n} (${rows.length - 1} rows): ${path}`)
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  const saveDir = typeof options.saveDir === 'string' ? options.saveDir : DEFAULT_DIR
+
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     const drawn = await next(e)
     const tables = e.props.isSummary ? [] : tablesIn(e.props.text)
@@ -86,7 +105,7 @@ export const register: Register = on => {
             >
               {`Copy table ${i + 1}`}
             </Button>
-            <Button key={`save-${i}`} onPress={() => save($, rows, i + 1)}>
+            <Button key={`save-${i}`} onPress={() => save($, rows, i + 1, saveDir)}>
               {`Save table ${i + 1} CSV`}
             </Button>
           </Box>
