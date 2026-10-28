@@ -1,6 +1,6 @@
 {
   "name": "table-export",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Buttons right under each markdown table in Claude's replies: one main export button (TSV by default) and a More button for CSV, Markdown, box-drawing text, HTML and PNG",
   "userConfig": {
     "saveDir": {

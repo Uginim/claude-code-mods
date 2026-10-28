@@ -151,6 +151,8 @@ Then run `/reload-plugins` in an open session, or start a new one.
 
 Each table gets one **main button** and a **More** button. More shows the other formats; pressing one of them runs it and hides the row again.
 
+After **Save CSV**, that table's row also shows **Copy CSV path**, which copies the full path of the file just saved (the latest one, if the table was saved more than once).
+
 | Format | What it does | Where it works |
 | --- | --- | --- |
 | `tsv` | Copies the table as tab-separated text, so it pastes into separate spreadsheet cells | Any surface with a clipboard |

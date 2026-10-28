@@ -49,6 +49,8 @@ test('each table in a reply gets a main button and a More button', async ($, on)
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...row({ text: REPLY, isFirstOfReply: true }), surface })
+    // The path saved in the terminal pass is still offered on the desktop.
+    const kept = surface === 'desktop' ? ['Copy CSV path'] : []
     // The engine draws the text up to the first table; the buttons follow each table.
     expect(await ui.find({ type: 'Text', text: /Two tables and a fenced one[\s\S]*\| 1 \| 2 \|$/ })).toBeDefined()
     expect(await ui.find({ type: 'Markdown', text: /^```[\s\S]*\| `lee` \| short \|$/ })).toBeDefined()
@@ -57,6 +59,7 @@ test('each table in a reply gets a main button and a More button', async ($, on)
       'More',
       'Copy table 2 TSV',
       'More',
+      ...kept,
     ])
 
     await ui.press({ key: 'main-1' })
@@ -73,15 +76,23 @@ test('each table in a reply gets a main button and a More button', async ($, on)
       'Copy art',
       'Copy HTML',
       'Copy PNG',
+      ...kept,
     ])
     await ui.press({ key: 'fmt-1-csv' })
-    // A format press closes the row again.
-    expect(await ui.findAll({ type: 'Button' })).toHaveLength(4)
+    // A format press closes the row again; a saved table also offers its path.
+    expect((await ui.findAll({ type: 'Button' })).map(b => b.text).slice(2)).toEqual([
+      'Copy table 2 TSV',
+      'More',
+      'Copy CSV path',
+    ])
     expect(writes.at(-1)?.path).toMatch(/^\/Users\/me\/Downloads\/claude-table-\d{8}-\d{6}\.csv$/)
     expect(writes.at(-1)?.text).toBe(
       '﻿name,note,extra\r\n김,"says ""hi"", then   leaves",a | b\r\nlee,short,\r\n',
     )
     expect(toasts.at(-1)).toMatch(/^Saved table 2 \(2 rows\): \/Users\/me\/Downloads\//)
+    await ui.press({ key: 'path-1' })
+    expect(copies.at(-1)).toBe(writes.at(-1)?.path)
+    expect(toasts.at(-1)).toBe(`Copied ${writes.at(-1)?.path}`)
 
     await ui.press({ key: 'more-0' })
     await ui.press({ key: 'fmt-0-md' })

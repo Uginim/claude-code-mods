@@ -205,7 +205,8 @@ const resolveDir = async ($: EngineInterface, configured: string) => {
   return { dir: home + dir.slice(1) }
 }
 
-const save = async ($: EngineInterface, rows: string[][], n: number, saveDir: string) => {
+const save = async ($: EngineInterface, t: Table, n: number, saveDir: string) => {
+  const { rows } = t
   const resolved = await resolveDir($, saveDir)
   if (resolved.dir === undefined) return $.ui.toast(resolved.reason)
   const path = `${resolved.dir}/claude-table-${stamp(await $.clock.now())}.csv`
@@ -214,10 +215,11 @@ const save = async ($: EngineInterface, rows: string[][], n: number, saveDir: st
   } catch (error) {
     return $.ui.toast(`Not saved to ${path}: ${error instanceof Error ? error.message : String(error)}`)
   }
+  await update($, savedPaths, paths => ({ ...paths, [t.id]: path }))
   $.ui.toast(`Saved table ${n} (${rows.length - 1} rows): ${path}`)
 }
 
-type Table = { rows: string[][]; align: Align[]; markdown: string }
+type Table = { id: string; rows: string[][]; align: Align[]; markdown: string }
 
 // The label on the main button (with the table's number) and on the extra row.
 const LABELS: Record<Format, { main: (n: number) => string; extra: string }> = {
@@ -234,12 +236,17 @@ const copyAs = async ($: EngineInterface, name: string, text: string, n: number,
   $.ui.toast(copied.isCopied ? `Copied table ${n} as ${name}.` : `Not copied: ${copied.reason}`)
 }
 
+const copyPath = async ($: EngineInterface, path: string, surface: RenderSurface) => {
+  const copied = await $.ui.copy({ text: path, surface })
+  $.ui.toast(copied.isCopied ? `Copied ${path}` : `Not copied: ${copied.reason}`)
+}
+
 const exportAs = async ($: EngineInterface, format: Format, t: Table, n: number, surface: RenderSurface, saveDir: string) => {
   switch (format) {
     case 'tsv':
       return copyAs($, 'TSV', toTsv(t.rows), n, surface)
     case 'csv':
-      return save($, t.rows, n, saveDir)
+      return save($, t, n, saveDir)
     case 'md':
       return copyAs($, 'Markdown', t.markdown, n, surface)
     case 'art':
@@ -264,6 +271,8 @@ const isFormat = (value: unknown): value is Format => FORMAT_NAMES.some(f => f =
 
 // The table whose extra format buttons are showing, keyed by its markdown and position.
 const openId = atom({ plugin: 'table-export', key: 'openId' } as const, null)
+// The last CSV file saved from each table, by the same id, so its path can be copied.
+const savedPaths = atom({ plugin: 'table-export', key: 'savedPaths' } as const, {})
 
 const hash = (text: string) => {
   let h = 5381
@@ -287,6 +296,7 @@ export const register: Register = (on, options) => {
     const tail = lines.slice(tables.at(-1)?.end).join('\n')
     const first = await next({ ...e, props: { ...e.props, text: pieces[0] ?? '' } })
     const open = await read($, openId)
+    const paths = await read($, savedPaths)
     const rest = (text: string, key: string) =>
       text.trim() === '' ? null : (
         <Box key={key} paddingLeft={2}>
@@ -297,8 +307,10 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column">
         {tables.map(({ rows, align, start, end }, i) => {
-          const t = { rows, align, markdown: lines.slice(start, end).join('\n') }
-          const id = `${hash(t.markdown)}-${i}`
+          const markdown = lines.slice(start, end).join('\n')
+          const id = `${hash(markdown)}-${i}`
+          const t = { id, rows, align, markdown }
+          const savedPath = paths[id]
           const isOpen = open === id
           return (
             <Box key={`piece-${i}`} flexDirection="column">
@@ -323,6 +335,11 @@ export const register: Register = (on, options) => {
                       </Button>
                     ))
                   : null}
+                {savedPath !== undefined && (
+                  <Button key={`path-${i}`} onPress={press => copyPath($, savedPath, press.surface)}>
+                    Copy CSV path
+                  </Button>
+                )}
               </Box>
             </Box>
           )
