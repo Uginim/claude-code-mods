@@ -1,6 +1,6 @@
 {
   "name": "edit-diff-log",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pane listing every file edit Claude made, each with its unified diff, kept across sessions",
   "author": {
     "name": "Uginim"

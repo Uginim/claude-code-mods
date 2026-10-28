@@ -3,44 +3,62 @@ import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import type { Format } from '../types'
 
-// Only tables whose rows start and end with `|` count; add GFM's pipe-less form when needed.
-const ROW = /^\s*\|.*\|\s*$/
-const SEPARATOR = /^\s*\|(\s*:?-+:?\s*\|)+\s*$/
-const FENCE = /^\s*(```|~~~)/
+// GFM tables: outer pipes are optional, and the separator row must have as many cells as the header.
+const ROW = /^(?=.*\|).*\S.*$/
+const SEPARATOR = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/
+const FENCE = /^\s*(`{3,}|~{3,})/
 
-const splitRow = (line: string) =>
+type Align = 'left' | 'center' | 'right' | undefined
+
+// Inline markdown a spreadsheet or image would show literally: links keep their text, emphasis marks go.
+const plain = (cell: string) =>
+  cell
+    .replace(/\\\|/g, '|')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*|__|~~|`/g, '')
+    .replace(/(^|[^\w*])\*(?=\S)([^*]*\S)\*(?!\w)/g, '$1$2')
+
+const cellsOf = (line: string) =>
   line
     .trim()
-    .slice(1, -1)
+    .replace(/^\|/, '')
+    .replace(/(?<!\\)\|$/, '')
     .split(/(?<!\\)\|/)
-    .map(cell =>
-      cell
-        .trim()
-        .replace(/\\\|/g, '|')
-        .replace(/<br\s*\/?>/gi, ' ')
-        .replace(/\*\*|__|`/g, ''),
-    )
+    .map(cell => cell.trim())
+
+const alignOf = (cell: string): Align =>
+  cell.startsWith(':') ? (cell.endsWith(':') ? 'center' : 'left') : cell.endsWith(':') ? 'right' : undefined
+
+// A separator needs a pipe somewhere, so a lone `---` (a rule) is not one.
+const isSeparator = (line: string) => line.includes('|') && SEPARATOR.test(line)
 
 // Every table in a reply block, in order, outside fenced code blocks, with its first line and the line after its last row.
 const tablesIn = (text: string) => {
-  const tables: { rows: string[][]; start: number; end: number }[] = []
+  const tables: { rows: string[][]; align: Align[]; start: number; end: number }[] = []
   const lines = text.split('\n')
-  let inFence = false
+  let fence = ''
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? ''
-    if (FENCE.test(line)) {
-      inFence = !inFence
+    const marker = FENCE.exec(line)?.[1]
+    if (marker !== undefined) {
+      // A fence closes only on the same character, at least as long as the one that opened it.
+      if (fence === '') fence = marker
+      else if (marker[0] === fence[0] && marker.length >= fence.length) fence = ''
       continue
     }
-    if (inFence || !ROW.test(line) || !SEPARATOR.test(lines[i + 1] ?? '')) continue
-    const header = splitRow(line)
-    const rows = [header]
+    const next = lines[i + 1] ?? ''
+    if (fence !== '' || !ROW.test(line) || !isSeparator(next)) continue
+    const header = cellsOf(line)
+    const align = cellsOf(next).map(alignOf)
+    if (align.length !== header.length) continue
+    const rows = [header.map(plain)]
     let j = i + 2
-    for (; ROW.test(lines[j] ?? ''); j++) {
-      const cells = splitRow(lines[j] ?? '')
-      rows.push(header.map((_, c) => cells[c] ?? ''))
+    for (; ROW.test(lines[j] ?? '') && !FENCE.test(lines[j] ?? ''); j++) {
+      const cells = cellsOf(lines[j] ?? '')
+      rows.push(header.map((_, c) => plain(cells[c] ?? '')))
     }
-    tables.push({ rows, start: i, end: j })
+    tables.push({ rows, align, start: i, end: j })
     i = j - 1
   }
 
@@ -50,8 +68,13 @@ const tablesIn = (text: string) => {
 const csvCell = (cell: string) => (/[",\r\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell)
 // The BOM lets Excel read the file as UTF-8, so Korean text is not garbled.
 const toCsv = (rows: string[][]) => `﻿${rows.map(row => row.map(csvCell).join(',')).join('\r\n')}\r\n`
-// Tabs paste into separate spreadsheet cells; CSV would land in one column.
-const toTsv = (rows: string[][]) => rows.map(row => row.map(cell => cell.replace(/\t/g, ' ')).join('\t')).join('\n')
+// Tabs paste into separate spreadsheet cells; CSV would land in one column. A cell with a quote is
+// quoted, since spreadsheets read a leading quote as the start of a quoted cell.
+const tsvCell = (cell: string) => {
+  const flat = cell.replace(/\t/g, ' ')
+  return flat.includes('"') ? `"${flat.replace(/"/g, '""')}"` : flat
+}
+const toTsv = (rows: string[][]) => rows.map(row => row.map(tsvCell).join('\t')).join('\n')
 
 // East Asian wide characters and emoji take two terminal columns.
 const WIDE = [
@@ -64,11 +87,16 @@ const widthOf = (text: string) =>
     return sum + (WIDE.some(([lo, hi]) => code >= (lo ?? 0) && code <= (hi ?? 0)) ? 2 : 1)
   }, 0)
 
-const toArt = (rows: string[][]) => {
+const pad = (text: string, width: number, align: Align) => {
+  const room = width - widthOf(text)
+  const before = align === 'right' ? room : align === 'center' ? Math.floor(room / 2) : 0
+  return ' '.repeat(before) + text + ' '.repeat(room - before)
+}
+
+const toArt = (rows: string[][], align: Align[]) => {
   const widths = (rows[0] ?? []).map((_, c) => Math.max(...rows.map(row => widthOf(row[c] ?? ''))))
   const rule = (l: string, m: string, r: string) => l + widths.map(w => '─'.repeat(w + 2)).join(m) + r
-  const line = (row: string[]) =>
-    `│${widths.map((w, c) => ` ${row[c] ?? ''}${' '.repeat(w - widthOf(row[c] ?? ''))} `).join('│')}│`
+  const line = (row: string[]) => `│${widths.map((w, c) => ` ${pad(row[c] ?? '', w, align[c])} `).join('│')}│`
   const [header = [], ...body] = rows
 
   return [rule('┌', '┬', '┐'), line(header), rule('├', '┼', '┤'), ...body.map(line), rule('└', '┴', '┘')].join('\n')
@@ -76,9 +104,15 @@ const toArt = (rows: string[][]) => {
 
 const escapeHtml = (text: string) =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-const toHtml = (rows: string[][]) => {
+const toHtml = (rows: string[][], align: Align[]) => {
   const [header = [], ...body] = rows
-  const cells = (row: string[], tag: string) => row.map(cell => `<${tag}>${escapeHtml(cell)}</${tag}>`).join('')
+  const cells = (row: string[], tag: string) =>
+    row
+      .map((cell, c) => {
+        const style = align[c] === undefined ? '' : ` style="text-align:${align[c]}"`
+        return `<${tag}${style}>${escapeHtml(cell)}</${tag}>`
+      })
+      .join('')
 
   return `<table><thead><tr>${cells(header, 'th')}</tr></thead><tbody>${body.map(row => `<tr>${cells(row, 'td')}</tr>`).join('')}</tbody></table>`
 }
@@ -96,7 +130,7 @@ function run(argv) {
 // Draws the table at twice its point size: white cells, a grey bold header, grey grid lines.
 const PNG_SCRIPT = `ObjC.import('AppKit')
 function run(argv) {
-  const rows = JSON.parse(argv[0])
+  const rows = JSON.parse(argv[0]), align = JSON.parse(argv[1])
   const pad = 8, line = 1, scale = 2
   const color = (r, g, b) => $.NSColor.colorWithSRGBRedGreenBlueAlpha(r, g, b, 1)
   const attrs = bold => {
@@ -123,7 +157,9 @@ function run(argv) {
   cells.forEach((row, r) => {
     let left = 0
     row.forEach((cell, c) => {
-      cell.str.drawAtPointWithAttributes($.NSMakePoint(left + line + pad, H - top - line - pad / 2 - cell.size.height), cell.a)
+      const room = widths[c] - pad * 2 - cell.size.width
+      const shift = align[c] === 'right' ? room : align[c] === 'center' ? room / 2 : 0
+      cell.str.drawAtPointWithAttributes($.NSMakePoint(left + line + pad + shift, H - top - line - pad / 2 - cell.size.height), cell.a)
       left += widths[c]
     })
     top += heights[r]
@@ -181,7 +217,7 @@ const save = async ($: EngineInterface, rows: string[][], n: number, saveDir: st
   $.ui.toast(`Saved table ${n} (${rows.length - 1} rows): ${path}`)
 }
 
-type Table = { rows: string[][]; markdown: string }
+type Table = { rows: string[][]; align: Align[]; markdown: string }
 
 // The label on the main button (with the table's number) and on the extra row.
 const LABELS: Record<Format, { main: (n: number) => string; extra: string }> = {
@@ -207,16 +243,17 @@ const exportAs = async ($: EngineInterface, format: Format, t: Table, n: number,
     case 'md':
       return copyAs($, 'Markdown', t.markdown, n, surface)
     case 'art':
-      return copyAs($, 'box-drawing text', toArt(t.rows), n, surface)
+      return copyAs($, 'box-drawing text', toArt(t.rows, t.align), n, surface)
     case 'html': {
-      const reason = await jxa($, HTML_SCRIPT, [toHtml(t.rows), toTsv(t.rows)])
+      const html = toHtml(t.rows, t.align)
+      const reason = await jxa($, HTML_SCRIPT, [html, toTsv(t.rows)])
       if (reason === undefined) return $.ui.toast(`Copied table ${n} as HTML.`)
       // Without the macOS clipboard, the HTML source is still useful as text.
-      const copied = await $.ui.copy({ text: toHtml(t.rows), surface })
+      const copied = await $.ui.copy({ text: html, surface })
       return $.ui.toast(copied.isCopied ? `Copied table ${n} as HTML source (${reason})` : `Not copied: ${reason}`)
     }
     case 'png': {
-      const reason = await jxa($, PNG_SCRIPT, [JSON.stringify(t.rows)])
+      const reason = await jxa($, PNG_SCRIPT, [JSON.stringify(t.rows), JSON.stringify(t.align)])
       return $.ui.toast(reason === undefined ? `Copied table ${n} as PNG.` : `Not copied: ${reason}`)
     }
   }
@@ -259,8 +296,8 @@ export const register: Register = (on, options) => {
 
     return (
       <Box flexDirection="column">
-        {tables.map(({ rows, start, end }, i) => {
-          const t = { rows, markdown: lines.slice(start, end).join('\n') }
+        {tables.map(({ rows, align, start, end }, i) => {
+          const t = { rows, align, markdown: lines.slice(start, end).join('\n') }
           const id = `${hash(t.markdown)}-${i}`
           const isOpen = open === id
           return (

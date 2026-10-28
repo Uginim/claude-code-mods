@@ -1,6 +1,6 @@
 {
   "name": "creation-log",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pane listing files and links Claude created (new files, gh create URLs, published Artifacts)",
   "author": {
     "name": "Uginim"

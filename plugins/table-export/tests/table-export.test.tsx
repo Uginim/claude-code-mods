@@ -60,7 +60,8 @@ test('each table in a reply gets a main button and a More button', async ($, on)
     ])
 
     await ui.press({ key: 'main-1' })
-    expect(copies.at(-1)).toBe('name\tnote\textra\n김\tsays "hi", then   leaves\ta | b\nlee\tshort\t')
+    // A cell with a quote is quoted, so a spreadsheet keeps the quote marks.
+    expect(copies.at(-1)).toBe('name\tnote\textra\n김\t"says ""hi"", then   leaves"\ta | b\nlee\tshort\t')
     expect(toasts.at(-1)).toBe('Copied table 2 as TSV.')
 
     await ui.press({ key: 'more-1' })
@@ -161,10 +162,10 @@ test('the main button follows the defaultFormat setting', { options: { defaultFo
   const ui = await $.ui.mount({ ...row({ text: REPLY, isFirstOfReply: true }), surface: 'terminal' })
   expect((await ui.findAll({ type: 'Button' })).map(b => b.text).slice(0, 2)).toEqual(['Copy table 1 art', 'More'])
   await ui.press({ key: 'main-1' })
-  // Korean takes two columns, so its row lines up with the others.
+  // Korean takes two columns, so its row lines up with the others; `---:` right-aligns the second column.
   expect(copies.at(-1)?.split('\n').slice(3, 5)).toEqual([
     '│ 김   │ says "hi", then   leaves │ a | b │',
-    '│ lee  │ short                    │       │',
+    '│ lee  │                    short │       │',
   ])
   await ui.press({ key: 'more-1' })
   expect((await ui.findAll({ type: 'Button' })).map(b => b.text).slice(4)).toEqual([
@@ -205,15 +206,15 @@ test('HTML and PNG go through osascript, with a fallback when it fails', async (
   await ui.press({ key: 'fmt-1-html' })
   expect(runs.at(-1)?.slice(0, 4)).toEqual(['osascript', '-l', 'JavaScript', '-e'])
   expect(runs.at(-1)?.[5]).toBe(
-    '<table><thead><tr><th>name</th><th>note</th><th>extra</th></tr></thead><tbody>' +
-      '<tr><td>김</td><td>says &quot;hi&quot;, then   leaves</td><td>a | b</td></tr>' +
-      '<tr><td>lee</td><td>short</td><td></td></tr></tbody></table>',
+    '<table><thead><tr><th style="text-align:left">name</th><th style="text-align:right">note</th><th>extra</th></tr></thead><tbody>' +
+      '<tr><td style="text-align:left">김</td><td style="text-align:right">says &quot;hi&quot;, then   leaves</td><td>a | b</td></tr>' +
+      '<tr><td style="text-align:left">lee</td><td style="text-align:right">short</td><td></td></tr></tbody></table>',
   )
   expect(toasts.at(-1)).toBe('Copied table 2 as HTML.')
 
   await ui.press({ key: 'more-0' })
   await ui.press({ key: 'fmt-0-png' })
-  expect(runs.at(-1)?.[5]).toBe('[["a","b"],["1","2"]]')
+  expect(runs.at(-1)?.slice(5)).toEqual(['[["a","b"],["1","2"]]', '[null,null]'])
   expect(toasts.at(-1)).toBe('Copied table 1 as PNG.')
 
   works = false
@@ -224,5 +225,48 @@ test('HTML and PNG go through osascript, with a fallback when it fails', async (
   await ui.press({ key: 'more-0' })
   await ui.press({ key: 'fmt-0-png' })
   expect(toasts.at(-1)).toMatch(/^Not copied: osascript did not run \(macOS only\)/)
+  await ui.unmount()
+})
+
+test('tables without outer pipes, longer fences and inline markdown', async ($, on) => {
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>{e.props.text}</Text>
+  })
+  const copies: string[] = []
+  on('ui.copy', (_, e) => {
+    copies.push(e.text)
+    return { value: { isCopied: true } }
+  })
+  on('ui.toast', () => ({ value: undefined }))
+
+  const text = [
+    'name | link',
+    ':---: | ---',
+    '*kim* | [docs](https://example.com)',
+    '~~old~~ | snake_case_name',
+    '',
+    '````',
+    '```',
+    'a | b',
+    '--- | ---',
+    '```',
+    '````',
+    '',
+    'a rule, not a table',
+    '---',
+    '',
+    '| x | y |',
+    '| --- |',
+    '| 1 | 2 |',
+  ].join('\n')
+  const ui = await $.ui.mount({ ...row({ text, isFirstOfReply: true }), surface: 'terminal' })
+  // Only the first table counts: the second is inside a four-backtick fence, the third's separator is short a cell.
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['Copy table 1 TSV', 'More'])
+  await ui.press({ key: 'main-0' })
+  expect(copies.at(-1)).toBe('name\tlink\nkim\tdocs\nold\tsnake_case_name')
+  await ui.press({ key: 'more-0' })
+  await ui.press({ key: 'fmt-0-art' })
+  expect(copies.at(-1)?.split('\n')[3]).toBe('│ kim  │ docs            │')
   await ui.unmount()
 })

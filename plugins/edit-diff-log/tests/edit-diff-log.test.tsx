@@ -31,6 +31,13 @@ test('edits and overwrites are listed with counts, a press shows the diff', asyn
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('clock.now', () => ({ value: Date.UTC(2026, 9, 26, 3, 4, 5) }))
   on('session.id', () => ({ value: 'this-session' }))
+  on('session.cwd', () => ({ value: '/work/demo' }))
+  const copies: string[] = []
+  on('ui.copy', (_, e) => {
+    copies.push(e.text)
+    return { value: { isCopied: true } }
+  })
+  on('ui.toast', () => ({ value: undefined }))
   let saved: unknown = [
     { id: 'prev', path: '/prev/b.ts', name: 'b.ts', at: 1, added: 1, removed: 0, patch: '@@ -1,0 +1,1 @@\n+x', session: 'other-session' },
   ]
@@ -77,12 +84,20 @@ test('edits and overwrites are listed with counts, a press shows the diff', asyn
     expect(edit?.text).toMatch(/^\d\d:\d\d:\d\d a\.ts \+2 -1$/)
     expect(await ui.find({ type: 'Button', text: /old\.md/ })).toBeDefined()
     expect(await ui.find({ type: 'Button', text: /new\.md/ })).toBeUndefined()
-    expect((await ui.find({ type: 'Button', text: /b\.ts/ }))?.text).toMatch(/b\.ts \+1 -0 \[othe\]$/)
+    expect(await ui.find({ type: 'Text', text: 'This session · 2 edits +4 -2' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', text: /b\.ts/ })).toBeUndefined()
+    const other = await ui.find({ type: 'Button', text: /\[othe\]/ })
+    expect(other?.text).toMatch(/^▸ \d\d-\d\d \d\d:\d\d · 1 edit \+1 -0 \[othe\]$/)
+    await ui.press({ key: other!.key! })
+    expect((await ui.find({ type: 'Button', text: /b\.ts/ }))?.text).toMatch(/^\d\d:\d\d:\d\d b\.ts \+1 -0$/)
+    await ui.press({ key: other!.key! })
 
     expect(await ui.find({ type: 'Code' })).toBeUndefined()
     await ui.press({ key: edit!.key! })
     expect(await ui.find({ type: 'Text', text: '/work/a.ts' })).toBeDefined()
     expect((await ui.find({ type: 'Code' }))?.props.source).toBe('@@ -3,1 +3,2 @@\n-a\n+b\n+c')
+    await ui.press({ key: `copy-${edit!.key!}` })
+    expect(copies.at(-1)).toBe('/work/a.ts')
     await ui.press({ key: edit!.key! })
     expect(await ui.find({ type: 'Code' })).toBeUndefined()
     await ui.press({ key: 'close' })

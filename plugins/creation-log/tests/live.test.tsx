@@ -26,6 +26,7 @@ test('a file created while the pane is open shows up, Close closes the pane', as
   let now = Date.UTC(2026, 9, 26, 3, 4, 5)
   on('clock.now', () => ({ value: now++ }))
   on('session.id', () => ({ value: 'this-session' }))
+  on('session.cwd', () => ({ value: '/w' }))
   let saved: unknown = []
   on('store.get', () => ({ value: saved }))
   on('store.set', (_, e) => {

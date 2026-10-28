@@ -21,6 +21,7 @@ const changes = atom({ plugin: 'edit-diff-log', key: 'changes' } as const, [], {
   shape: 'changes-1',
 })
 const openId = atom({ plugin: 'edit-diff-log', key: 'openId' } as const, null)
+const shownSession = atom({ plugin: 'edit-diff-log', key: 'shownSession' } as const, null)
 
 const fileName = (path: string) => path.split('/').pop() || path
 const hhmmss = (at: number) => {
@@ -30,6 +31,41 @@ const hhmmss = (at: number) => {
     .map(n => String(n).padStart(2, '0'))
     .join(':')
 }
+
+const mmddhhmm = (at: number) => {
+  const d = new Date(at)
+  const two = (n: number) => String(n).padStart(2, '0')
+
+  return `${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`
+}
+
+// Newest first: this session's group, then the others by their latest entry. Entries saved
+// without a session id form one group with the id ''.
+const groupBySession = <T extends { at: number; session?: string }>(list: readonly T[], current: string) => {
+  const groups = new Map<string, T[]>()
+  for (const item of [...list].reverse()) {
+    const id = item.session ?? ''
+    groups.set(id, [...(groups.get(id) ?? []), item])
+  }
+
+  return [...groups]
+    .map(([id, items]) => ({ id, items, isCurrent: id === current }))
+    .sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent))
+}
+
+// `MM-DD HH:MM · folder · summary [id]`, the time being the group's oldest kept entry.
+const sessionLabel = (id: string, items: readonly { at: number; dir?: string }[], summary: string) => {
+  if (id === '') return `Unknown session · ${summary}`
+  const dir = items.find(item => item.dir !== undefined)?.dir
+  const start = mmddhhmm(items.at(-1)?.at ?? 0)
+
+  return [start, dir, summary].filter(Boolean).join(' · ') + ` [${id.slice(0, 4)}]`
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+const summarize = (items: readonly Change[]) =>
+  `${plural(items.length, 'edit')} +${items.reduce((n, item) => n + item.added, 0)} -${items.reduce((n, item) => n + item.removed, 0)}`
 
 // Whole hunks only: a hunk cut in the middle no longer draws as a diff.
 const toPatch = (hunks: readonly Hunk[]) => {
@@ -78,6 +114,7 @@ const record = async ($: EngineInterface, path: string, hunks: readonly Hunk[]) 
     removed: lines.filter(l => l.startsWith('-')).length,
     patch: toPatch(hunks),
     session: await $.session.id(),
+    dir: await $.session.cwd().then(fileName, () => undefined),
   }
   await persist($, [change])
 }
@@ -131,7 +168,38 @@ export const register: Register = on => {
     const { Box, Text, Button, Code } = $.ui.resolve(e)
     const list = await read($, changes)
     const open = await read($, openId)
-    const current = await $.session.id()
+    const shown = await read($, shownSession)
+    const groups = groupBySession(list, await $.session.id())
+
+    const copyPath = async (path: string) => {
+      const copied = await $.ui.copy({ text: path, surface: e.surface })
+      await $.ui.toast(copied.isCopied ? 'Copied path.' : `Not copied: ${copied.reason ?? 'no clipboard'}`)
+    }
+
+    const rows = (items: readonly Change[]) =>
+      items.map(item => (
+        <Box key={`row-${item.id}`} flexDirection="column">
+          <Button key={item.id} plain onPress={() => update($, openId, cur => (cur === item.id ? null : item.id))}>
+            <Text dimColor>{hhmmss(item.at)}</Text> {item.name} <Text color="green">+{item.added}</Text>{' '}
+            <Text color="red">-{item.removed}</Text>
+          </Button>
+          {open === item.id && (
+            <Box flexDirection="column" paddingLeft={2}>
+              <Box flexDirection="row" gap={1}>
+                <Text dimColor>{item.path}</Text>
+                <Button key={`copy-${item.id}`} onPress={() => copyPath(item.path)}>
+                  Copy path
+                </Button>
+              </Box>
+              {item.patch ? (
+                <Code format="diff" source={item.patch} path={item.path} />
+              ) : (
+                <Text dimColor>Diff too large to show.</Text>
+              )}
+            </Box>
+          )}
+        </Box>
+      ))
 
     return (
       <Box flexDirection="column">
@@ -139,31 +207,28 @@ export const register: Register = on => {
           Close
         </Button>
         {list.length === 0 && <Text dimColor>No edits yet.</Text>}
-        {[...list].reverse().map(item => (
-          <Box key={`row-${item.id}`} flexDirection="column">
-            <Button
-              key={item.id}
-              plain
-              onPress={() => update($, openId, cur => (cur === item.id ? null : item.id))}
-            >
-              <Text dimColor>{hhmmss(item.at)}</Text> {item.name}{' '}
-              <Text color="green">+{item.added}</Text> <Text color="red">-{item.removed}</Text>
-              {item.session !== undefined && item.session !== current && (
-                <Text dimColor> [{item.session.slice(0, 4)}]</Text>
-              )}
-            </Button>
-            {open === item.id && (
-              <Box flexDirection="column" paddingLeft={2}>
-                <Text dimColor>{item.path}</Text>
-                {item.patch ? (
-                  <Code format="diff" source={item.patch} path={item.path} />
-                ) : (
-                  <Text dimColor>Diff too large to show.</Text>
-                )}
-              </Box>
-            )}
-          </Box>
-        ))}
+        {list.length > 0 && groups[0]?.isCurrent !== true && <Text dimColor>No edits in this session yet.</Text>}
+        {groups.map(({ id, items, isCurrent }) =>
+          isCurrent ? (
+            <Box key={`s-${id}`} flexDirection="column">
+              <Text bold>This session · {summarize(items)}</Text>
+              {rows(items)}
+            </Box>
+          ) : (
+            <Box key={`s-${id || 'unknown'}`} flexDirection="column">
+              <Button
+                key={`session-${id || 'unknown'}`}
+                plain
+                onPress={() => update($, shownSession, cur => (cur === id ? null : id))}
+              >
+                <Text dimColor>
+                  {shown === id ? '▾' : '▸'} {sessionLabel(id, items, summarize(items))}
+                </Text>
+              </Button>
+              {shown === id && rows(items)}
+            </Box>
+          ),
+        )}
       </Box>
     )
   })

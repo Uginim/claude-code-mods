@@ -7,10 +7,12 @@ export type Change = {
   removed: number
   patch: string
   session?: string
+  // The folder the session ran in, its last path part.
+  dir?: string
 }
 
 declare module 'claude-code' {
   interface PluginState {
-    'edit-diff-log': { changes: Shaped<Change[]>; openId: string | null }
+    'edit-diff-log': { changes: Shaped<Change[]>; openId: string | null; shownSession: string | null }
   }
 }
