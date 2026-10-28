@@ -21,7 +21,7 @@
 | --- | --- | --- | --- |
 | [**creation-log**](#creation-log) | A **Creations** pane listing new files Claude wrote and links it published | `/creations` | Yes, when a session starts |
 | [**edit-diff-log**](#edit-diff-log) | An **Edit diffs** pane listing every file edit, each with its diff | `/edit-diffs` | No |
-| [**table-export**](#table-export) | `Copy table n` / `Save table n CSV` buttons right under each markdown table in a reply | none | n/a |
+| [**table-export**](#table-export) | A main export button and a **More** button right under each markdown table in a reply | none | n/a |
 
 Each mod is a single hooks module (`hooks/register.tsx`) with its own tests. Install only the ones you want.
 
@@ -119,7 +119,7 @@ Then run `/reload-plugins` in an open session, or start a new one.
 
 ## table-export
 
-> Moves a markdown table from a reply into a spreadsheet in one press.
+> Moves a markdown table from a reply into a spreadsheet, a document or an image in one or two presses.
 
 ```text
   | name | score |
@@ -127,19 +127,35 @@ Then run `/reload-plugins` in an open session, or start a new one.
   | kim  | 92    |
   | lee  | 88    |
 
-  [Copy table 1] [Save table 1 CSV]
+  [Copy table 1 TSV] [More]
+
+  after pressing More:
+  [Copy table 1 TSV] [Less] [Save CSV] [Copy MD] [Copy art] [Copy HTML] [Copy PNG]
 ```
 
-- **Copy table n** copies the table as TSV, so it pastes into separate spreadsheet cells.
-- **Save table n CSV** writes `claude-table-YYYYMMDD-HHMMSS.csv` to `~/Downloads`, UTF-8 with a BOM so spreadsheet apps detect the encoding (non-ASCII text such as Korean stays readable). A toast shows the saved path.
-- **CSV folder** (`saveDir`): set it in `/config` or when installing. An absolute path or one starting with `~/`; empty means `~/Downloads`. The folder must already exist; if the write fails, a toast says why.
-- Cell clean-up: `**bold**`, `__bold__` and backticks are dropped, `<br>` becomes a space, `\|` becomes `|`.
+Each table gets one **main button** and a **More** button. More shows the other formats; pressing one of them runs it and hides the row again.
+
+| Format | What it does | Where it works |
+| --- | --- | --- |
+| `tsv` | Copies the table as tab-separated text, so it pastes into separate spreadsheet cells | Any surface with a clipboard |
+| `csv` | Writes `claude-table-YYYYMMDD-HHMMSS.csv` to the CSV folder, UTF-8 with a BOM so spreadsheet apps detect the encoding (non-ASCII text such as Korean stays readable); a toast shows the path | Anywhere |
+| `md` | Copies the table's original markdown lines | Any surface with a clipboard |
+| `art` | Copies the table drawn with box-drawing characters (`┌─┬─┐`); wide characters such as Korean count as two columns so the lines stay aligned in a monospaced font | Any surface with a clipboard |
+| `html` | Puts an HTML table on the clipboard, with TSV as its plain-text form, so rich editors paste a table | macOS (`osascript`); elsewhere the HTML source is copied as text and a toast says why |
+| `png` | Puts an image of the table on the clipboard | macOS (`osascript`); elsewhere a toast says it was not copied |
+
+**Settings** (in `/config`, or when installing):
+
+- **Main button** (`defaultFormat`): which format the main button runs. One of `tsv`, `csv`, `md`, `art`, `html`, `png`; `tsv` by default. The other five stay under More.
+- **CSV folder** (`saveDir`): an absolute path or one starting with `~/`; empty means `~/Downloads`. The folder must already exist; if the write fails, a toast says why.
+
+Cell clean-up (all formats except `md`): `**bold**`, `__bold__` and backticks are dropped, `<br>` becomes a space, `\|` becomes `|`.
 
 **Where the buttons go:** right under the table they belong to. The text up to the first table is drawn by Claude Code itself; the text after it is drawn again by the mod's markdown element, so it may look slightly different there.
 
 **Which tables count:** tables whose rows start and end with `|`, followed by a separator row. Tables inside fenced code blocks and summary blocks get no buttons.
 
-**Compared with the built-in `/copy`:** `/copy` copies a whole reply as markdown. This mod works per table and outputs TSV or CSV.
+**Compared with the built-in `/copy`:** `/copy` copies a whole reply as markdown. This mod works per table and offers the formats above.
 
 ---
 
@@ -162,7 +178,7 @@ Then run `/reload-plugins` in an open session, or start a new one.
     │   ├── types/index.d.ts           # $.state contract
     │   └── tests/
     ├── edit-diff-log/                 # same layout
-    └── table-export/                  # same layout, no state contract
+    └── table-export/                  # same layout
 ```
 
 Run a mod from a local checkout without installing it:

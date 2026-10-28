@@ -1,13 +1,27 @@
 {
   "name": "table-export",
-  "version": "0.3.0",
-  "description": "Buttons right under each markdown table in Claude's replies that copy it as TSV or save it as CSV (in ~/Downloads unless configured)",
+  "version": "0.4.0",
+  "description": "Buttons right under each markdown table in Claude's replies: one main export button (TSV by default) and a More button for CSV, Markdown, box-drawing text, HTML and PNG",
   "userConfig": {
     "saveDir": {
       "type": "string",
       "title": "CSV folder",
       "description": "Folder where Save table n CSV writes its files. Absolute path, or starting with ~/ for your home folder. Empty uses ~/Downloads.",
       "default": "~/Downloads"
+    },
+    "defaultFormat": {
+      "type": "string",
+      "title": "Main button",
+      "description": "What the main button under each table does: tsv (copy as TSV), csv (save as CSV), md (copy the markdown), art (copy as box-drawing text), html (copy as HTML, macOS), png (copy as an image, macOS). The others stay under More.",
+      "options": [
+        "tsv",
+        "csv",
+        "md",
+        "art",
+        "html",
+        "png"
+      ],
+      "default": "tsv"
     }
   },
   "author": {
@@ -15,10 +29,14 @@
   },
   "repository": "https://github.com/Uginim/claude-code-mods",
   "license": "MIT",
+  "types": "./types/index.d.ts",
   "keywords": [
     "table",
     "csv",
     "tsv",
+    "markdown",
+    "html",
+    "png",
     "export",
     "clipboard"
   ]
