@@ -18,9 +18,9 @@ const splitRow = (line: string) =>
         .replace(/\*\*|__|`/g, ''),
     )
 
-// Every table in a reply block, in order, outside fenced code blocks.
+// Every table in a reply block, in order, outside fenced code blocks, with the line after its last row.
 const tablesIn = (text: string) => {
-  const tables: string[][][] = []
+  const tables: { rows: string[][]; end: number }[] = []
   const lines = text.split('\n')
   let inFence = false
   for (let i = 0; i < lines.length; i++) {
@@ -37,7 +37,7 @@ const tablesIn = (text: string) => {
       const cells = splitRow(lines[j] ?? '')
       rows.push(header.map((_, c) => cells[c] ?? ''))
     }
-    tables.push(rows)
+    tables.push({ rows, end: j })
     i = j - 1
   }
 
@@ -86,30 +86,44 @@ export const register: Register = (on, options) => {
   const saveDir = typeof options.saveDir === 'string' ? options.saveDir : DEFAULT_DIR
 
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
-    const drawn = await next(e)
     const tables = e.props.isSummary ? [] : tablesIn(e.props.text)
-    if (tables.length === 0) return drawn
-    const { Box, Button } = $.ui.resolve(e)
+    if (tables.length === 0) return next(e)
+    const { Box, Button, Markdown } = $.ui.resolve(e)
+    const lines = e.props.text.split('\n')
+    // The block is cut after each table so its buttons sit right under it; the engine draws the
+    // first piece (keeping the reply's bullet), Markdown draws the rest. next runs only once.
+    const pieces = tables.map((t, i) => lines.slice(i === 0 ? 0 : (tables[i - 1]?.end ?? 0), t.end).join('\n'))
+    const tail = lines.slice(tables.at(-1)?.end).join('\n')
+    const first = await next({ ...e, props: { ...e.props, text: pieces[0] ?? '' } })
+    const rest = (text: string, key: string) =>
+      text.trim() === '' ? null : (
+        <Box key={key} paddingLeft={2}>
+          <Markdown key={`${key}-md`} text={text.replace(/^\n+/, '')} />
+        </Box>
+      )
 
     return (
       <Box flexDirection="column">
-        {drawn}
-        {tables.map((rows, i) => (
-          <Box key={`table-${i}`} flexDirection="row" gap={1}>
-            <Button
-              key={`copy-${i}`}
-              onPress={async press => {
-                const copied = await $.ui.copy({ text: toTsv(rows), surface: press.surface })
-                $.ui.toast(copied.isCopied ? `Copied table ${i + 1} as TSV.` : `Not copied: ${copied.reason}`)
-              }}
-            >
-              {`Copy table ${i + 1}`}
-            </Button>
-            <Button key={`save-${i}`} onPress={() => save($, rows, i + 1, saveDir)}>
-              {`Save table ${i + 1} CSV`}
-            </Button>
+        {tables.map(({ rows }, i) => (
+          <Box key={`piece-${i}`} flexDirection="column">
+            {i === 0 ? first : rest(pieces[i] ?? '', `text-${i}`)}
+            <Box key={`table-${i}`} flexDirection="row" gap={1}>
+              <Button
+                key={`copy-${i}`}
+                onPress={async press => {
+                  const copied = await $.ui.copy({ text: toTsv(rows), surface: press.surface })
+                  $.ui.toast(copied.isCopied ? `Copied table ${i + 1} as TSV.` : `Not copied: ${copied.reason}`)
+                }}
+              >
+                {`Copy table ${i + 1}`}
+              </Button>
+              <Button key={`save-${i}`} onPress={() => save($, rows, i + 1, saveDir)}>
+                {`Save table ${i + 1} CSV`}
+              </Button>
+            </Box>
           </Box>
         ))}
+        {rest(tail, 'text-tail')}
       </Box>
     )
   })

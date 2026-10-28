@@ -49,7 +49,9 @@ test('each table in a reply gets a copy and a save button', async ($, on) => {
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...row({ text: REPLY, isFirstOfReply: true }), surface })
-    expect(await ui.find({ type: 'Text', text: /Two tables and a fenced one/ })).toBeDefined()
+    // The engine draws the text up to the first table; the buttons follow each table.
+    expect(await ui.find({ type: 'Text', text: /Two tables and a fenced one[\s\S]*\| 1 \| 2 \|$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Markdown', text: /^```[\s\S]*\| `lee` \| short \|$/ })).toBeDefined()
     expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual([
       'Copy table 1',
       'Save table 1 CSV',

@@ -21,7 +21,7 @@
 | --- | --- | --- | --- |
 | [**creation-log**](#creation-log) | A **Creations** pane listing new files Claude wrote and links it published | `/creations` | Yes, when a session starts |
 | [**edit-diff-log**](#edit-diff-log) | An **Edit diffs** pane listing every file edit, each with its diff | `/edit-diffs` | No |
-| [**table-export**](#table-export) | `Copy table n` / `Save table n CSV` buttons under each reply that holds a markdown table | none | n/a |
+| [**table-export**](#table-export) | `Copy table n` / `Save table n CSV` buttons right under each markdown table in a reply | none | n/a |
 
 Each mod is a single hooks module (`hooks/register.tsx`) with its own tests. Install only the ones you want.
 
@@ -134,6 +134,8 @@ Then run `/reload-plugins` in an open session, or start a new one.
 - **Save table n CSV** writes `claude-table-YYYYMMDD-HHMMSS.csv` to `~/Downloads`, UTF-8 with a BOM so spreadsheet apps detect the encoding (non-ASCII text such as Korean stays readable). A toast shows the saved path.
 - **CSV folder** (`saveDir`): set it in `/config` or when installing. An absolute path or one starting with `~/`; empty means `~/Downloads`. The folder must already exist; if the write fails, a toast says why.
 - Cell clean-up: `**bold**`, `__bold__` and backticks are dropped, `<br>` becomes a space, `\|` becomes `|`.
+
+**Where the buttons go:** right under the table they belong to. The text up to the first table is drawn by Claude Code itself; the text after it is drawn again by the mod's markdown element, so it may look slightly different there.
 
 **Which tables count:** tables whose rows start and end with `|`, followed by a separator row. Tables inside fenced code blocks and summary blocks get no buttons.
 
